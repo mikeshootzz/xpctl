@@ -89,35 +89,21 @@ impl App {
     }
 
     fn draw(&self, frame: &mut Frame) {
-        let items: Vec<ListItem> = if self.viewing_resources {
-            self.resources
-                .get(&self.current_server)
-                .unwrap_or(&vec![])
-                .iter()
-                .map(|resource| ListItem::new(Line::from(format!("  {}", resource))))
-                .collect()
-        } else {
-            self.servers
-                .iter()
-                .enumerate()
-                .map(|(i, server)| {
-                    let content = if i == self.selected_index {
-                        Line::from(server.clone().bold().yellow())
-                    } else {
-                        Line::from(server.clone())
-                    };
-                    ListItem::new(content)
-                })
-                .collect()
-        };
+        let items: Vec<ListItem> = self
+            .servers
+            .iter()
+            .enumerate()
+            .map(|(i, server)| {
+                let content = if i == self.selected_index {
+                    Line::from(server.clone().bold().yellow())
+                } else {
+                    Line::from(server.clone())
+                };
+                ListItem::new(content)
+            })
+            .collect();
 
-        let title = if self.viewing_resources {
-            format!("Resources of {}", self.current_server)
-        } else {
-            "SSH Clients".to_string()
-        };
-
-        let block = Block::default().title(title).borders(Borders::ALL);
+        let block = Block::default().title("SSH Clients").borders(Borders::ALL);
         let list = List::new(items).block(block);
 
         frame.render_widget(list, frame.area());
@@ -130,7 +116,7 @@ impl App {
                 kind: KeyEventKind::Press,
                 ..
             }) => {
-                if !self.viewing_resources && self.selected_index < self.servers.len() - 1 {
+                if self.selected_index + 1 < self.servers.len() {
                     self.selected_index += 1;
                 }
             }
@@ -139,7 +125,7 @@ impl App {
                 kind: KeyEventKind::Press,
                 ..
             }) => {
-                if !self.viewing_resources && self.selected_index > 0 {
+                if self.selected_index > 0 {
                     self.selected_index -= 1;
                 }
             }
@@ -148,18 +134,13 @@ impl App {
                 kind: KeyEventKind::Press,
                 ..
             }) => {
-                if !self.viewing_resources {
-                    self.current_server = self.servers[self.selected_index].clone();
-                    self.viewing_resources = true;
-                }
-            }
-            Event::Key(KeyEvent {
-                code: KeyCode::Char('b'),
-                kind: KeyEventKind::Press,
-                ..
-            }) => {
-                if self.viewing_resources {
-                    self.viewing_resources = false;
+                let selected_server = self.servers[self.selected_index].clone();
+                if let Some(connection_ids) = self.resources.get(&selected_server) {
+                    if let Some(connection_id) = connection_ids.first() {
+                        self.open_terminal_session(connection_id);
+                    }
+                } else {
+                    eprintln!("No connection ID found for the selected server.");
                 }
             }
             Event::Key(KeyEvent {
@@ -222,17 +203,13 @@ impl App {
                 .send()?
                 .json()?;
 
-            for info in info_response.infos {
+            for (info, connection_id) in info_response.infos.into_iter().zip(connection_ids) {
                 if let Some(server_name) = info.name.first() {
                     self.servers.push(server_name.clone());
-                    if let Some(raw_data) = info.raw_data {
-                        if let Some(container_name) = raw_data.container_name {
-                            self.resources
-                                .entry(server_name.clone())
-                                .or_default()
-                                .push(container_name);
-                        }
-                    }
+                    self.resources
+                        .entry(server_name.clone())
+                        .or_default()
+                        .push(connection_id); // Store the UUID directly
                 }
             }
 
@@ -241,5 +218,44 @@ impl App {
         }
 
         Ok(())
+    }
+
+    fn open_terminal_session(&self, connection_uuid: &str) {
+        if let Some(token) = &self.session_token {
+            let client = Client::new();
+            let payload = json!({
+                "connection": connection_uuid,
+                "directory": "/"
+            });
+
+            execute!(io::stdout(), Clear(ClearType::All)).unwrap();
+            println!("Connecting to {}...", connection_uuid);
+
+            match client
+                .post(format!("{}/connection/terminal", API_URL))
+                .bearer_auth(token)
+                .json(&payload)
+                .send()
+            {
+                Ok(resp) => {
+                    if resp.status().is_success() {
+                        println!(
+                            "Terminal session opened successfully for: {}",
+                            connection_uuid
+                        );
+                    } else {
+                        let error_text =
+                            resp.text().unwrap_or_else(|_| "Unknown error".to_string());
+                        eprintln!("Error opening terminal session:\n{}", error_text);
+                    }
+                }
+                Err(err) => {
+                    eprintln!("Request failed: {}", err);
+                }
+            }
+
+            println!("Press any key to return...");
+            let _ = event::read();
+        }
     }
 }
