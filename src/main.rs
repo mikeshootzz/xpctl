@@ -1,4 +1,6 @@
 // ANCHOR: imports
+use dotenvy::dotenv;
+use std::env;
 use std::io;
 
 use crossterm::{
@@ -13,32 +15,68 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, Widget},
     DefaultTerminal, Frame,
 };
+use reqwest::blocking::Client;
+use serde::Deserialize;
+use serde_json::json;
 // ANCHOR_END: imports
 
+// API URL and API Key Constants
+const API_URL: &str = "http://localhost:21721";
+
+// ANCHOR: structs
+#[derive(Debug, Default)]
+pub struct App {
+    ssh_clients: Vec<String>,
+    selected_index: usize,
+    exit: bool,
+    session_token: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct HandshakeResponse {
+    sessionToken: String,
+}
+
+#[derive(Deserialize)]
+struct ConnectionQueryResponse {
+    found: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct ConnectionInfoResponse {
+    infos: Vec<ConnectionInfo>,
+}
+
+#[derive(Deserialize)]
+struct ConnectionInfo {
+    connection: String,
+    name: Vec<String>,
+}
+// ANCHOR_END: structs
+
 fn main() -> io::Result<()> {
+    dotenv().ok();
     let mut terminal = ratatui::init();
     let app_result = App::default().run(&mut terminal);
     ratatui::restore();
     app_result
 }
 
-// ANCHOR: app
-#[derive(Debug, Default)]
-pub struct App {
-    ssh_clients: Vec<String>,
-    selected_index: usize,
-    exit: bool,
-}
-// ANCHOR_END: app
-
 // ANCHOR: impl App
 impl App {
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
-        self.ssh_clients = vec![
-            "xpipe-client-1".to_string(),
-            "xpipe-client-2".to_string(),
-            "xpipe-client-3".to_string(),
-        ];
+        // Perform handshake to get the session token
+        match self.handshake() {
+            Ok(token) => {
+                self.session_token = Some(token);
+                if let Err(err) = self.fetch_connections() {
+                    eprintln!("Error fetching connections: {}", err);
+                }
+            }
+            Err(err) => {
+                eprintln!("Error during handshake: {}", err);
+            }
+        }
 
         while !self.exit {
             terminal.draw(|frame| self.draw(frame))?;
@@ -109,19 +147,74 @@ impl App {
     }
 
     fn open_session(&self) {
-        // Clear the screen before printing
         execute!(io::stdout(), Clear(ClearType::All)).unwrap();
-        println!(
-            "\nOpening terminal session for: {}",
-            self.ssh_clients[self.selected_index]
-        );
-        println!("Press any key to return...");
-
-        let _ = event::read(); // Wait for any key press before returning
+        if let Some(selected) = self.ssh_clients.get(self.selected_index) {
+            println!("\nOpening terminal session for: {}", selected);
+            println!("Press any key to return...");
+            let _ = event::read();
+        }
     }
 
     fn exit(&mut self) {
         self.exit = true;
+    }
+
+    fn handshake(&self) -> Result<String, reqwest::Error> {
+        let api_key =
+            env::var("XPIPE_API_KEY").expect("XPIPE_API_KEY environment variable not set");
+        let client = Client::new();
+
+        let response: HandshakeResponse = client
+            .post(format!("{}/handshake", API_URL))
+            .json(&serde_json::json!({
+                "auth": {
+                    "type": "ApiKey",
+                    "key": api_key
+                },
+                "client": {
+                    "type": "Api",
+                    "name": "xpcli"
+                }
+            }))
+            .send()?
+            .json()?;
+
+        Ok(response.sessionToken)
+    }
+
+    fn fetch_connections(&mut self) -> Result<(), reqwest::Error> {
+        if let Some(token) = &self.session_token {
+            let client = Client::new();
+            let response: ConnectionQueryResponse = client
+                .post(format!("{}/connection/query", API_URL))
+                .bearer_auth(token)
+                .json(&serde_json::json!({
+                    "categoryFilter": "*",
+                    "connectionFilter": "*",
+                    "typeFilter": "*"
+                }))
+                .send()?
+                .json()?;
+
+            let connection_ids = response.found;
+
+            let info_response: ConnectionInfoResponse = client
+                .post(format!("{}/connection/info", API_URL))
+                .bearer_auth(token)
+                .json(&serde_json::json!({
+                    "connections": connection_ids
+                }))
+                .send()?
+                .json()?;
+
+            self.ssh_clients = info_response
+                .infos
+                .iter()
+                .flat_map(|info| info.name.clone())
+                .collect();
+        }
+
+        Ok(())
     }
 }
 // ANCHOR_END: impl App
