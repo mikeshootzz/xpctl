@@ -1,11 +1,15 @@
 // ANCHOR: imports
 use std::io;
 
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
+use crossterm::{
+    event::{self, Event, KeyCode, KeyEvent, KeyEventKind},
+    execute,
+    terminal::{Clear, ClearType},
+};
 use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Stylize},
-    text::{Line, Text},
+    text::Line,
     widgets::{Block, Borders, List, ListItem, Widget},
     DefaultTerminal, Frame,
 };
@@ -105,11 +109,15 @@ impl App {
     }
 
     fn open_session(&self) {
+        // Clear the screen before printing
+        execute!(io::stdout(), Clear(ClearType::All)).unwrap();
         println!(
             "\nOpening terminal session for: {}",
             self.ssh_clients[self.selected_index]
         );
-        println!("Press 'q' to exit.");
+        println!("Press any key to return...");
+
+        let _ = event::read(); // Wait for any key press before returning
     }
 
     fn exit(&mut self) {
