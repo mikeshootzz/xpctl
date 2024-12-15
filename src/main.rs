@@ -1,6 +1,5 @@
 // ANCHOR: imports
-use dotenvy::dotenv;
-use std::env;
+use std::collections::HashMap;
 use std::io;
 
 use crossterm::{
@@ -9,7 +8,6 @@ use crossterm::{
     terminal::{Clear, ClearType},
 };
 use ratatui::{
-    layout::Rect,
     style::{Color, Modifier, Stylize},
     text::Line,
     widgets::{Block, Borders, List, ListItem, Widget},
@@ -20,14 +18,17 @@ use serde::Deserialize;
 use serde_json::json;
 // ANCHOR_END: imports
 
-// API URL and API Key Constants
+// API URL
 const API_URL: &str = "http://localhost:21721";
 
 // ANCHOR: structs
 #[derive(Debug, Default)]
 pub struct App {
-    ssh_clients: Vec<String>,
+    servers: Vec<String>,
+    resources: HashMap<String, Vec<String>>,
     selected_index: usize,
+    viewing_resources: bool,
+    current_server: String,
     exit: bool,
     session_token: Option<String>,
 }
@@ -49,13 +50,20 @@ struct ConnectionInfoResponse {
 
 #[derive(Deserialize)]
 struct ConnectionInfo {
-    connection: String,
     name: Vec<String>,
+    #[serde(rename = "rawData")]
+    raw_data: Option<RawData>,
+}
+
+#[derive(Deserialize)]
+struct RawData {
+    #[serde(rename = "containerName")]
+    container_name: Option<String>,
 }
 // ANCHOR_END: structs
 
 fn main() -> io::Result<()> {
-    dotenv().ok();
+    dotenvy::dotenv().ok();
     let mut terminal = ratatui::init();
     let app_result = App::default().run(&mut terminal);
     ratatui::restore();
@@ -65,17 +73,12 @@ fn main() -> io::Result<()> {
 // ANCHOR: impl App
 impl App {
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
-        // Perform handshake to get the session token
-        match self.handshake() {
-            Ok(token) => {
-                self.session_token = Some(token);
-                if let Err(err) = self.fetch_connections() {
-                    eprintln!("Error fetching connections: {}", err);
-                }
-            }
-            Err(err) => {
-                eprintln!("Error during handshake: {}", err);
-            }
+        if let Ok(token) = self.handshake() {
+            self.session_token = Some(token);
+            self.fetch_connections()
+                .unwrap_or_else(|err| eprintln!("Error fetching connections: {}", err));
+        } else {
+            eprintln!("Error during handshake.");
         }
 
         while !self.exit {
@@ -86,22 +89,35 @@ impl App {
     }
 
     fn draw(&self, frame: &mut Frame) {
-        let items: Vec<ListItem> = self
-            .ssh_clients
-            .iter()
-            .enumerate()
-            .map(|(i, client)| {
-                let content = if i == self.selected_index {
-                    Line::from(client.clone().bold().yellow())
-                } else {
-                    Line::from(client.clone())
-                };
-                ListItem::new(content)
-            })
-            .collect();
+        let items: Vec<ListItem> = if self.viewing_resources {
+            self.resources
+                .get(&self.current_server)
+                .unwrap_or(&vec![])
+                .iter()
+                .map(|resource| ListItem::new(Line::from(format!("  {}", resource))))
+                .collect()
+        } else {
+            self.servers
+                .iter()
+                .enumerate()
+                .map(|(i, server)| {
+                    let content = if i == self.selected_index {
+                        Line::from(server.clone().bold().yellow())
+                    } else {
+                        Line::from(server.clone())
+                    };
+                    ListItem::new(content)
+                })
+                .collect()
+        };
 
-        let block = Block::default().title("SSH Clients").borders(Borders::ALL);
+        let title = if self.viewing_resources {
+            format!("Resources of {}", self.current_server)
+        } else {
+            "SSH Clients".to_string()
+        };
 
+        let block = Block::default().title(title).borders(Borders::ALL);
         let list = List::new(items).block(block);
 
         frame.render_widget(list, frame.area());
@@ -114,7 +130,7 @@ impl App {
                 kind: KeyEventKind::Press,
                 ..
             }) => {
-                if self.selected_index < self.ssh_clients.len() - 1 {
+                if !self.viewing_resources && self.selected_index < self.servers.len() - 1 {
                     self.selected_index += 1;
                 }
             }
@@ -123,7 +139,7 @@ impl App {
                 kind: KeyEventKind::Press,
                 ..
             }) => {
-                if self.selected_index > 0 {
+                if !self.viewing_resources && self.selected_index > 0 {
                     self.selected_index -= 1;
                 }
             }
@@ -132,41 +148,40 @@ impl App {
                 kind: KeyEventKind::Press,
                 ..
             }) => {
-                self.open_session();
+                if !self.viewing_resources {
+                    self.current_server = self.servers[self.selected_index].clone();
+                    self.viewing_resources = true;
+                }
+            }
+            Event::Key(KeyEvent {
+                code: KeyCode::Char('b'),
+                kind: KeyEventKind::Press,
+                ..
+            }) => {
+                if self.viewing_resources {
+                    self.viewing_resources = false;
+                }
             }
             Event::Key(KeyEvent {
                 code: KeyCode::Char('q'),
                 kind: KeyEventKind::Press,
                 ..
             }) => {
-                self.exit();
+                self.exit = true;
             }
             _ => {}
         };
         Ok(())
     }
 
-    fn open_session(&self) {
-        execute!(io::stdout(), Clear(ClearType::All)).unwrap();
-        if let Some(selected) = self.ssh_clients.get(self.selected_index) {
-            println!("\nOpening terminal session for: {}", selected);
-            println!("Press any key to return...");
-            let _ = event::read();
-        }
-    }
-
-    fn exit(&mut self) {
-        self.exit = true;
-    }
-
     fn handshake(&self) -> Result<String, reqwest::Error> {
         let api_key =
-            env::var("XPIPE_API_KEY").expect("XPIPE_API_KEY environment variable not set");
+            std::env::var("XPIPE_API_KEY").expect("XPIPE_API_KEY environment variable not set");
         let client = Client::new();
 
         let response: HandshakeResponse = client
             .post(format!("{}/handshake", API_URL))
-            .json(&serde_json::json!({
+            .json(&json!({
                 "auth": {
                     "type": "ApiKey",
                     "key": api_key
@@ -181,13 +196,14 @@ impl App {
 
         Ok(response.sessionToken)
     }
+
     fn fetch_connections(&mut self) -> Result<(), reqwest::Error> {
         if let Some(token) = &self.session_token {
             let client = Client::new();
             let response: ConnectionQueryResponse = client
                 .post(format!("{}/connection/query", API_URL))
                 .bearer_auth(token)
-                .json(&serde_json::json!({
+                .json(&json!({
                     "categoryFilter": "*",
                     "connectionFilter": "*",
                     "typeFilter": "*"
@@ -200,31 +216,30 @@ impl App {
             let info_response: ConnectionInfoResponse = client
                 .post(format!("{}/connection/info", API_URL))
                 .bearer_auth(token)
-                .json(&serde_json::json!({
+                .json(&json!({
                     "connections": connection_ids
                 }))
                 .send()?
                 .json()?;
 
-            // Collect unique server names
-            let mut unique_servers = std::collections::HashSet::new();
-
-            self.ssh_clients = info_response
-                .infos
-                .into_iter()
-                .filter_map(|info| {
-                    // Use only the first part of the connection name (the server name)
-                    let server_name = info.name.first()?.clone();
-                    if unique_servers.insert(server_name.clone()) {
-                        Some(server_name)
-                    } else {
-                        None
+            for info in info_response.infos {
+                if let Some(server_name) = info.name.first() {
+                    self.servers.push(server_name.clone());
+                    if let Some(raw_data) = info.raw_data {
+                        if let Some(container_name) = raw_data.container_name {
+                            self.resources
+                                .entry(server_name.clone())
+                                .or_default()
+                                .push(container_name);
+                        }
                     }
-                })
-                .collect();
+                }
+            }
+
+            self.servers.sort();
+            self.servers.dedup();
         }
 
         Ok(())
     }
 }
-// ANCHOR_END: impl App
