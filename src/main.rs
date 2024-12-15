@@ -181,7 +181,6 @@ impl App {
 
         Ok(response.sessionToken)
     }
-
     fn fetch_connections(&mut self) -> Result<(), reqwest::Error> {
         if let Some(token) = &self.session_token {
             let client = Client::new();
@@ -207,10 +206,21 @@ impl App {
                 .send()?
                 .json()?;
 
+            // Collect unique server names
+            let mut unique_servers = std::collections::HashSet::new();
+
             self.ssh_clients = info_response
                 .infos
-                .iter()
-                .flat_map(|info| info.name.clone())
+                .into_iter()
+                .filter_map(|info| {
+                    // Use only the first part of the connection name (the server name)
+                    let server_name = info.name.first()?.clone();
+                    if unique_servers.insert(server_name.clone()) {
+                        Some(server_name)
+                    } else {
+                        None
+                    }
+                })
                 .collect();
         }
 
