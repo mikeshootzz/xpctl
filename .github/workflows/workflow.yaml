@@ -59,6 +59,8 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v3
@@ -76,6 +78,6 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            xpctl-macos-arm64.zip
-            xpctl-linux-x86_64.zip
-            xpctl-windows-x86_64.zip
+            /home/runner/work/xpctl/xpctl/xpctl-linux-x86_64.zip
+            /home/runner/work/xpctl/xpctl/xpctl-macos-arm64.zip
+            /home/runner/work/xpctl/xpctl/xpctl-windows-x86_64.zip
