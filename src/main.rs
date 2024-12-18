@@ -187,7 +187,7 @@ impl App {
                 .json(&json!({
                     "categoryFilter": "*",
                     "connectionFilter": "*",
-                    "typeFilter": "*"
+                    "typeFilter": "ssh"
                 }))
                 .send()?
                 .json()?;
