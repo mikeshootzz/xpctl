@@ -107,12 +107,29 @@ impl App {
         let list = List::new(items).block(block);
 
         frame.render_widget(list, frame.area());
+
+        // Display navigation instructions
+        let instructions = Line::from(
+            "Navigation: ↑/↓ or j/k to move | Enter to select | q to quit"
+                .bold()
+                .cyan(),
+        );
+
+        let area = frame.size();
+        let instruction_area = ratatui::layout::Rect {
+            x: area.x,
+            y: area.y + area.height.saturating_sub(1),
+            width: area.width,
+            height: 1,
+        };
+
+        frame.render_widget(instructions, instruction_area);
     }
 
     fn handle_events(&mut self) -> io::Result<()> {
         match event::read()? {
             Event::Key(KeyEvent {
-                code: KeyCode::Down,
+                code: KeyCode::Down | KeyCode::Char('j'),
                 kind: KeyEventKind::Press,
                 ..
             }) => {
@@ -121,7 +138,7 @@ impl App {
                 }
             }
             Event::Key(KeyEvent {
-                code: KeyCode::Up,
+                code: KeyCode::Up | KeyCode::Char('k'),
                 kind: KeyEventKind::Press,
                 ..
             }) => {
