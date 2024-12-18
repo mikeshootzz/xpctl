@@ -81,6 +81,8 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            *.zip
+            xpctl-macos-arm64.zip
+            xpctl-linux-x86_64.zip
+            xpctl-windows-x86_64.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
