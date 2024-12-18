@@ -1,88 +1,43 @@
-name: Build and Release
-
-on:
-  push:
-    tags:
-      - "v*.*.*"
+name: Release
 
 permissions:
   contents: write
 
+on:
+  push:
+    tags:
+      - v*
+
 jobs:
-  build:
-    runs-on: ${{ matrix.os }}
+  create-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/create-gh-release-action@v1
+        with:
+          changelog: CHANGELOG.md
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  upload-assets:
+    needs: create-release
     strategy:
       matrix:
         include:
-          - target: aarch64-apple-darwin
-            os: macos-latest
-            rust_target: aarch64-apple-darwin
-            asset_name: xpctl-macos-arm64.zip
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
-            rust_target: x86_64-unknown-linux-gnu
-            asset_name: xpctl-linux-x86_64.zip
+
+          - target: x86_64-apple-darwin
+            os: macos-latest
+
           - target: x86_64-pc-windows-msvc
             os: windows-latest
-            rust_target: x86_64-pc-windows-msvc
-            asset_name: xpctl-windows-x86_64.zip
-
+    runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v3
-
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v4
+      - uses: taiki-e/upload-rust-binary-action@v1
         with:
-          toolchain: stable
-          target: ${{ matrix.rust_target }}
-          override: true
-
-      - name: Install Visual Studio Build Tools for Windows
-        if: matrix.os == 'windows-latest'
-        uses: ilammy/msvc-dev-cmd@v1
-
-      - name: Build binary
-        run: cargo build --target ${{ matrix.rust_target }} --release
-
-      - name: Archive production artifacts
-        shell: bash
-        run: |
-          if [[ "${{ matrix.target }}" == "x86_64-pc-windows-msvc" ]]; then
-            7z a ${{ matrix.asset_name }} target/${{ matrix.rust_target }}/release/xpctl.exe
-          else
-            zip ${{ matrix.asset_name }} target/${{ matrix.rust_target }}/release/xpctl
-          fi
-
-      - name: Upload artifact for later use
-        uses: actions/upload-artifact@v3
-        with:
-          name: ${{ matrix.asset_name }}
-          path: ${{ matrix.asset_name }}
-
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v3
-        with:
-          path: artifacts
-
-      - name: Debug - List files
-        run: |
-          echo "Listing artifacts directory:"
-          ls -la artifacts
-
-      - name: Create GitHub Release and Upload Assets
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: "Release ${{ github.ref_name }}"
-          draft: false
-          prerelease: false
-          files: |
-            xpctl-macos-arm64.zip
-            xpctl-linux-x86_64.zip
-            xpctl-windows-x86_64.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          bin: xpctl
+          target: ${{ matrix.target }}
+          tar: unix
+          zip: windows
+          token: ${{ secrets.GITHUB_TOKEN }}
