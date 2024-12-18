@@ -1,0 +1,110 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            rust_target: aarch64-apple-darwin
+            asset_name: xpctl-macos-arm64.zip
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            rust_target: x86_64-unknown-linux-gnu
+            asset_name: xpctl-linux-x86_64.zip
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            rust_target: x86_64-pc-windows-msvc
+            asset_name: xpctl-windows-x86_64.zip
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: ${{ matrix.rust_target }}
+          override: true
+
+      - name: Install Visual Studio Build Tools for Windows
+        if: matrix.os == 'windows-latest'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Build binary
+        run: cargo build --target ${{ matrix.rust_target }} --release
+
+      - name: Archive production artifacts
+        shell: bash
+        run: |
+          if [[ "${{ matrix.target }}" == "x86_64-pc-windows-msvc" ]]; then
+            7z a ${{ matrix.asset_name }} target/${{ matrix.rust_target }}/release/xpctl.exe
+          else
+            zip ${{ matrix.asset_name }} target/${{ matrix.rust_target }}/release/xpctl
+          fi
+
+      - name: Upload artifact for release
+        uses: actions/upload-artifact@v2
+        with:
+          name: ${{ matrix.asset_name }}
+          path: ${{ matrix.asset_name }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v2
+        with:
+          path: .
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+
+      - name: Debug - List files in the directory
+        run: ls -la && cd xpctl-linux-x86_64.zip && ls -la
+
+      - name: Upload Release Asset macOS ARM64
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./xpctl-macos-arm64.zip/xpctl-macos-arm64.zip
+          asset_name: xpctl-macos-arm64.zip
+          asset_content_type: application/zip
+
+      - name: Upload Release Asset Linux x86_64
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./xpctl-linux-x86_64.zip/xpctl-linux-x86_64.zip
+          asset_name: xpctl-linux-x86_64.zip
+          asset_content_type: application/zip
+
+      - name: Upload Release Asset Windows x86_64
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./xpctl-windows-x86_64.zip/xpctl-windows-x86_64.zip
+          asset_name: xpctl-windows-x86_64.zip
+          asset_content_type: application/zip
