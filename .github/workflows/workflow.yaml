@@ -81,8 +81,6 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            ./artifacts/xpctl-macos-arm64.zip
-            ./artifacts/xpctl-linux-x86_64.zip
-            ./artifacts/xpctl-windows-x86_64.zip
+            artifacts/*.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
