@@ -25,7 +25,7 @@ jobs:
             asset_name: xpctl-windows-x86_64.zip
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
@@ -51,7 +51,7 @@ jobs:
           fi
 
       - name: Upload artifact for release
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: ${{ matrix.asset_name }}
           path: ${{ matrix.asset_name }}
@@ -61,50 +61,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           path: .
 
       - name: Create Release
         id: create_release
-        uses: actions/create-release@v1
+        uses: softprops/action-gh-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
           draft: false
           prerelease: false
-
-      - name: Debug - List files in the directory
-        run: ls -la && cd xpctl-linux-x86_64.zip && ls -la
-
-      - name: Upload Release Asset macOS ARM64
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./xpctl-macos-arm64.zip/xpctl-macos-arm64.zip
-          asset_name: xpctl-macos-arm64.zip
-          asset_content_type: application/zip
-
-      - name: Upload Release Asset Linux x86_64
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./xpctl-linux-x86_64.zip/xpctl-linux-x86_64.zip
-          asset_name: xpctl-linux-x86_64.zip
-          asset_content_type: application/zip
-
-      - name: Upload Release Asset Windows x86_64
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./xpctl-windows-x86_64.zip/xpctl-windows-x86_64.zip
-          asset_name: xpctl-windows-x86_64.zip
-          asset_content_type: application/zip
+          files: |
+            xpctl-macos-arm64.zip
+            xpctl-linux-x86_64.zip
+            xpctl-windows-x86_64.zip
