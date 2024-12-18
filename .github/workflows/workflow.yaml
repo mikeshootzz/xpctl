@@ -1,49 +1,29 @@
-name: Release Workflow
+# .github/workflows/release.yml
 
 on:
-  push:
-    tags:
-      - "v*" # Triggers the workflow when a tag starting with 'v' is pushed
+  release:
+    types: [created]
 
 jobs:
   release:
+    name: release ${{ matrix.target }}
     runs-on: ubuntu-latest
-    permissions:
-      contents: write # Allows the action to create and update releases
-
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-pc-windows-gnu
+            archive: zip
+          - target: x86_64-unknown-linux-musl
+            archive: tar.gz tar.xz tar.zst
+          - target: x86_64-apple-darwin
+            archive: zip
     steps:
-      # Step 1: Checkout the repository
-      - name: Checkout Repository
-        uses: actions/checkout@v3
-
-      # Step 2: Download all artifacts
-      - name: Download Artifacts
-        uses: actions/download-artifact@v3
-        with:
-          path: ./artifacts # Download artifacts to a specific directory
-
-      # Step 3: List the downloaded artifacts to verify their paths
-      - name: List Downloaded Artifacts
-        run: ls -R ./artifacts
-
-      # Step 4: Move artifacts to the root directory for easier reference
-      - name: Move Artifacts to Root
-        run: |
-          mv ./artifacts/xpctl-linux-x86_64.zip .
-          mv ./artifacts/xpctl-macos-arm64.zip .
-          mv ./artifacts/xpctl-windows-x86_64.zip .
-
-      # Step 5: Create a GitHub release
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ github.ref }} # Uses the pushed tag as the release tag
-          name: Release ${{ github.ref_name }}
-          draft: false
-          prerelease: false
-          files: |
-            ./xpctl-linux-x86_64.zip
-            ./xpctl-macos-arm64.zip
-            ./xpctl-windows-x86_64.zip
+      - uses: actions/checkout@master
+      - name: Compile and release
+        uses: rust-build/rust-build.action@v1.4.5
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          RUSTTARGET: ${{ matrix.target }}
+          ARCHIVE_TYPES: ${{ matrix.archive }}
