@@ -1,81 +1,80 @@
-name: Deploy
+name: Build and Release
 
 on:
   push:
     tags:
-      - "v*"
-
-permissions:
-  contents: write
+      - "v*.*.*"
 
 jobs:
-  build-and-upload:
-    name: Build and upload
+  build:
     runs-on: ${{ matrix.os }}
-
     strategy:
       matrix:
-        # You can add more, for any target you'd like!
         include:
-          - build: linux
-            os: ubuntu-latest
-            target: x86_64-unknown-linux-musl
-
-          - build: macos
+          - target: aarch64-apple-darwin
             os: macos-latest
-            target: x86_64-apple-darwin
-
-          - build: windows-gnu
+            rust_target: aarch64-apple-darwin
+            asset_name: postmyrustache-macos-arm64.zip
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            rust_target: x86_64-unknown-linux-gnu
+            asset_name: postmyrustache-linux-x86_64.zip
+          - target: x86_64-pc-windows-msvc
             os: windows-latest
-            target: x86_64-pc-windows-gnu
+            rust_target: x86_64-pc-windows-msvc
+            asset_name: postmyrustache-windows-x86_64.zip
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-      - name: Get the release version from the tag
-        shell: bash
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
-
-      - name: Install Rust
-        # Or @nightly if you want
-        uses: dtolnay/rust-toolchain@stable
-        # Arguments to pass in
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
         with:
-          # Make Rust compile to our target (defined in the matrix)
-          targets: ${{ matrix.target }}
+          toolchain: stable
+          target: ${{ matrix.rust_target }}
+          override: true
 
-      - name: Build
-        uses: actions-rs/cargo@v1
-        with:
-          use-cross: true
-          command: build
-          args: --verbose --release --target ${{ matrix.target }}
+      - name: Install Visual Studio Build Tools for Windows
+        if: matrix.os == 'windows-latest'
+        uses: ilammy/msvc-dev-cmd@v1
 
-      - name: Build archive
+      - name: Build binary
+        run: cargo build --target ${{ matrix.rust_target }} --release
+
+      - name: Archive production artifacts
         shell: bash
         run: |
-          # Replace with the name of your binary
-          binary_name="xpctl"
-
-          dirname="$binary_name-${{ env.VERSION }}-${{ matrix.target }}"
-          mkdir "$dirname"
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            mv "target/${{ matrix.target }}/release/$binary_name.exe" "$dirname"
+          if [[ "${{ matrix.target }}" == "x86_64-pc-windows-msvc" ]]; then
+            7z a ${{ matrix.asset_name }} target/${{ matrix.rust_target }}/release/postmyrustache.exe
           else
-            mv "target/${{ matrix.target }}/release/$binary_name" "$dirname"
+            zip ${{ matrix.asset_name }} target/${{ matrix.rust_target }}/release/postmyrustache
           fi
 
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            7z a "$dirname.zip" "$dirname"
-            echo "ASSET=$dirname.zip" >> $GITHUB_ENV
-          else
-            tar -czf "$dirname.tar.gz" "$dirname"
-            echo "ASSET=$dirname.tar.gz" >> $GITHUB_ENV
-          fi
+      - name: Upload artifact for later use
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.asset_name }}
+          path: ${{ matrix.asset_name }}
 
-      - name: Release
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: artifacts
+
+      - name: Create GitHub Release and Upload Assets
         uses: softprops/action-gh-release@v1
         with:
+          tag_name: ${{ github.ref }}
+          release_name: "Release ${{ github.ref_name }}"
+          draft: false
+          prerelease: false
           files: |
-            ${{ env.ASSET }}
+            artifacts/postmyrustache-macos-arm64.zip
+            artifacts/postmyrustache-linux-x86_64.zip
+            artifacts/postmyrustache-windows-x86_64.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
