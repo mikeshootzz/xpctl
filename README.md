@@ -7,11 +7,16 @@ Terminal interface for XPipe
 
 ## Installation
 
-Install my-project with npm
+MacOS/Linux:
 
 ```bash
-  npm install my-project
-  cd my-project
+curl -L https://raw.githubusercontent.com/mikeshootzz/xpctl/main/install-scripts/unix.sh | bash
+```
+
+Windows
+
+```powershell
+Invoke-Expression (Invoke-WebRequest -Uri https://raw.githubusercontent.com/mikeshootzz/xpctl/main/install-scripts/windows.ps1 -UseBasicParsing).Content
 ```
 
 ## Environment Variables
