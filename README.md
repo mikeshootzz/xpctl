@@ -1,35 +1,50 @@
-[![Rust](https://img.shields.io/badge/Rust-%23000000.svg?e&logo=rust&logoColor=white)](#)
+# XPCTL
+
+![Rust](https://img.shields.io/badge/Rust-%23000000.svg?e&logo=rust&logoColor=white)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/mikeshootzz/xpctl/workflow.yaml)
 
-# XPCTL
-Terminal interface for XPipe
+**XPCTL** is a terminal interface for XPipe, enabling streamlined management of connections and remote operations.
 
-## Installation
+---
 
-MacOS/Linux:
+## 🚀 Installation
+
+### For macOS/Linux:
 
 ```bash
 curl -L https://raw.githubusercontent.com/mikeshootzz/xpctl/main/install-scripts/unix.sh | bash
 ```
 
-Windows
+### For Windows:
 
 ```powershell
 Invoke-Expression (Invoke-WebRequest -Uri https://raw.githubusercontent.com/mikeshootzz/xpctl/main/install-scripts/windows.ps1 -UseBasicParsing).Content
 ```
 
-## Environment Variables
+---
 
-To run this project, you will need to add the following environment variables to your .env file
+## ⚙️ Environment Variables
 
-`API_KEY`
+Before using XPCTL, set the following environment variable:
 
-`ANOTHER_API_KEY`
+```bash
+export XPIPE_API_KEY="your-api-key-here"
+```
 
+---
 
-## Roadmap
+## 🗺️ Roadmap
 
-- Additional browser support
+- [x] **Basic SSH connections**
+- [ ] **Docker Container support**
+- [ ] **Kubernetes support**
+- [ ] **Add and remove hosts**
 
-- Add more integrations
+---
+
+## 📄 License
+
+XPCTL is licensed under the [Apache 2.0 License](https://opensource.org/licenses/Apache-2.0).
+
+---
