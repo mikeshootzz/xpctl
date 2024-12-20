@@ -5,7 +5,7 @@ OS="$(uname -s)"
 ARCH="$(uname -m)"
 
 # Set the download URL base
-REPO_URL="https://github.com/mikeshootzz/xpctl/releases/download/v1.0.0-alpha.3"
+REPO_URL="https://github.com/mikeshootzz/xpctl/releases/download/v1.0.0-alpha.4"
 
 # Determine the appropriate binary based on OS and ARCH
 case "$OS" in

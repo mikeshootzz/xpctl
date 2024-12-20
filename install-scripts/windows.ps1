@@ -1,5 +1,5 @@
 # Set the download URL
-$RepoURL = "https://github.com/mikeshootzz/xpctl/releases/download/v1.0.0-alpha.3"
+$RepoURL = "https://github.com/mikeshootzz/xpctl/releases/download/v1.0.0-alpha.4"
 $Filename = "xpctl-x86_64-pc-windows-msvc.zip"
 $DownloadURL = "$RepoURL/$Filename"
 $TempPath = "$env:TEMP\$Filename"
