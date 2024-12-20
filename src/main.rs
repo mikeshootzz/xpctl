@@ -98,7 +98,7 @@ impl App {
             .spawn()
             .expect("Failed to spawn fzf process");
 
-        // Take the stdin and write to it
+        // Write the server list to fzf's stdin
         if let Some(mut stdin) = child.stdin.take() {
             if let Err(e) = stdin.write_all(input.as_bytes()) {
                 eprintln!("Failed to write to fzf stdin: {}", e);
@@ -111,8 +111,14 @@ impl App {
         if output.status.success() {
             if let Ok(selected) = String::from_utf8(output.stdout) {
                 let selected = selected.trim();
-                if let Some(index) = self.servers.iter().position(|s| s == selected) {
-                    self.selected_index = index;
+                if let Some(connection_ids) = self.resources.get(selected) {
+                    if let Some(connection_id) = connection_ids.first() {
+                        self.open_terminal_session(connection_id);
+                    } else {
+                        eprintln!("No connection ID found for the selected server.");
+                    }
+                } else {
+                    eprintln!("Selected server not found in resources.");
                 }
             }
         } else {
