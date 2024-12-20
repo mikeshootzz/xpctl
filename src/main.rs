@@ -1,6 +1,8 @@
 // ANCHOR: imports
 use std::collections::HashMap;
 use std::io;
+use std::io::Write;
+use std::process::{Command, Stdio};
 
 use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyEventKind},
@@ -87,7 +89,36 @@ impl App {
         }
         Ok(())
     }
+    fn fzf_search(&mut self) {
+        let input = self.servers.join("\n");
 
+        let mut child = Command::new("fzf")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .expect("Failed to spawn fzf process");
+
+        // Take the stdin and write to it
+        if let Some(mut stdin) = child.stdin.take() {
+            if let Err(e) = stdin.write_all(input.as_bytes()) {
+                eprintln!("Failed to write to fzf stdin: {}", e);
+                return;
+            }
+        }
+
+        let output = child.wait_with_output().expect("Failed to read fzf output");
+
+        if output.status.success() {
+            if let Ok(selected) = String::from_utf8(output.stdout) {
+                let selected = selected.trim();
+                if let Some(index) = self.servers.iter().position(|s| s == selected) {
+                    self.selected_index = index;
+                }
+            }
+        } else {
+            eprintln!("No selection made or fzf process failed.");
+        }
+    }
     fn draw(&self, frame: &mut Frame) {
         let items: Vec<ListItem> = self
             .servers
@@ -159,6 +190,13 @@ impl App {
                 } else {
                     eprintln!("No connection ID found for the selected server.");
                 }
+            }
+            Event::Key(KeyEvent {
+                code: KeyCode::Char('/'),
+                kind: KeyEventKind::Press,
+                ..
+            }) => {
+                self.fzf_search();
             }
             Event::Key(KeyEvent {
                 code: KeyCode::Char('q'),
